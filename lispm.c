@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include<string.h>
+#include <string.h>
 
 
-#define heapSize 1000 
+#define heapSize 10000 
 #define _REDTEXT_ "\033[31m"
 #define _GREENTEXT_ "\033[32m"
 #define _NORMALTEXT_ "\033[0m"
@@ -39,6 +39,27 @@ struct lispList heap[heapSize];
 
 
 struct lispList* freeList;
+
+//////////////////////////////////////////////////Free////////////////////////////////////////////////////////////
+//void* freeData()
+
+
+/*struct lispList* freeFirstStack(struct lispList* stack){
+			struct lispList* sstack = stack;
+			stack = stack -> next;
+			//free_data(sstack->info, sstack->t);
+			free(sstack->info);
+			free(sstack);
+			return stack;
+}*/
+
+struct tokenizeList* freeFirstStackShallow(struct tokenizeList* stack){
+	struct tokenizeList* sstack = stack;
+	stack = stack -> next;
+	free(sstack);
+	return stack;
+}
+
 /////////////////////////////////////////////////Strings////////////////////////////////////////////////////////////
 
 int isNumber(char* string){ // Функция isNumber() проверяет является ли строка числом 
@@ -67,7 +88,6 @@ int strToInt(char *string){
 
 char* slicesStr (char* str, int start, int end){
 	if(start > end){
-		printf("start > end\n");
 		exit(1);
 	}
 	int len = end - start;
@@ -198,9 +218,9 @@ void printElement(union element info, enum type t){
 	if( t == INTEGER){
 		printf("%d ", info.num );
 	}else if(t == LIST){
-		printf("[ ");
+		printf("( ");
 		printList( info.list );
-		printf("] ");
+		printf(") ");
 	}else if(t == SYMBOL){
 		printf("'%c'", info.symbol);
 	}
@@ -296,17 +316,17 @@ struct tokenizeList*  tokenize(char* str){
 	int len = strlen(str);
 	int start = 0;
 	int i = 0;
-	int addhappened = 1; 
+	int addHappened = 1; 
 	struct tokenizeList* ls = NULL;
 	
 	for(; i < len; i ++){
-		if((str[i] == ' '|| str[i] == '\n' || str[i] == '\t') && !addhappened){ // добавление информации в результат 
+		if((str[i] == ' '|| str[i] == '\n' || str[i] == '\t') && !addHappened){ // если жто пустая клетка и добапления не произошло 
 			ls = addString(slicesStr(str, start, i), ls); //вырезание нужной информации в результат 
 			start = i + 1 ;
-			addhappened = 1;
+			addHappened = 1;
 		}
 		else if ( i + 1 < len && str[i + 1] == '(' ){ 	// нахождение  скобок
-		    if (!addhappened){
+		    if (!addHappened){
 		    	ls = addString(slicesStr(str, start, i), ls);  //вырезание предыдущей информации в результат 
 		    }
 		    char* res = malloc(sizeof(char) * 3);
@@ -316,21 +336,21 @@ struct tokenizeList*  tokenize(char* str){
 			ls = addString(res, ls);
 			start = i + 2;
 			i ++;
-			addhappened = 1;
+			addHappened = 1;
 		}
 		else if (( str[i] == '(' || str[i] == ')')){ // нахождение квадратных скобок
-		    if (!addhappened){
+		    if (!addHappened){
 		    	ls = addString(slicesStr(str, start, i), ls);  //вырезание предыдущей информации в результат 
 		    }
 			ls = addString(charToString(str[i]), ls);
 			start = i + 1;
-			addhappened = 1;
+			addHappened = 1;
 		}
-		else if ((str[i] == ' '|| str[i] == '\n' || str[i] == '\t') && addhappened){//пропуск лишних пробелов и перезодных строк 
+		else if ((str[i] == ' '|| str[i] == '\n' || str[i] == '\t') && addHappened){//пропуск лишних пробелов и перезодных строк 
 			start = i + 1;
 		}
 		else{
-			addhappened = 0;
+			addHappened = 0;
 		}
 	} 
 	if(i != start){
@@ -360,11 +380,13 @@ struct lispList* defineType(char* info,struct lispList* stack){
 			free(info);
 			return consInteger(num , stack );
 		}
-		else if( eqStrings(info,"[") || eqStrings(info,"]") ){
-			return consSymbol(info[0], stack );
+		else if( eqStrings(info,"(") || eqStrings(info,")") ){
+			char symbol = info[0];
+			free(info);
+			return consSymbol(symbol, stack );
 		}
 		else{
-			printError("Type can not be defined", __FUNCTION__);
+			printError("Type cannot be defined", __FUNCTION__);
 		}
 		
 }
@@ -380,41 +402,39 @@ struct lispList* parsing (struct tokenizeList* list){
 
 	while (list != NULL){
 		char* elemnt = list->info;
-		if( eqStrings(elemnt, "]")){ // добавление чисел и строк на стек 
-			//printf("aaaaaaa\n");
+		if( !eqStrings(elemnt, ")")){ // добавление чисел и строк на стек 
 			stack = defineType(elemnt, stack);
 		} 
-		else if( eqStrings(elemnt, "]")){  //добавление списков на стек
-			printList(stack);
-			printf("\n");
-			exit(1);
+		else if( eqStrings(elemnt, ")")){  //добавление списков на стек
+			//printList(stack);
+			//printf("\n");
+			//exit(1);
 			free(list->info);
 			struct lispList* res;
 			
-			if ( stack->t == SYMBOL && stack->info.symbol == '['){
+			if ( stack->t == SYMBOL && stack->info.symbol == '('){
 				//stack = free_first_stack(stack);
 				stack = stack->next;
 				res = NULL;		
 			} 
 			else{
-				struct lispList* list_start = stack;
-	           	struct lispList* list_end = stack; 
-	           	
-	           	int a = 0;
+				struct lispList* listStart = stack;
+	           	struct lispList* listEnd = stack; 
 				
-				while (  stack->t != SYMBOL )  {
-					a++;
-					list_end = list_end->next;
+				while (  listEnd->t != SYMBOL )  {
+					listEnd = listEnd->next;
 				}
-				res = cutOutList(list_start, list_end);
-				//stack = free_first_stack(list_end);
-				stack = stack->next;
+				res = cutOutList(listStart, listEnd);
+				//stack = freeFirstStack(list_end);
+				
+				stack = listEnd->next;
 				
 			}
 			stack = consList( reverseLispList(res) ,stack);
 		
 		}
-		//ls = free_first_stack_shallow(ls);//
+		//list = list->next;
+		list = freeFirstStackShallow(list);
 		
 	}
 	
@@ -429,7 +449,7 @@ struct lispList* parsing (struct tokenizeList* list){
 int main(){
 
 	freeList = initializeFreeList();
-	struct tokenizeList* stringList =  tokenize("(1 2 5)");
+	struct tokenizeList* stringList =  tokenize("(123 23212 (1 2 (3 ( 4() 5) 6)) 5123123)");
 	printTokenizeList(stringList);
 	struct lispList* res = parsing(stringList);
 	printList(res);
@@ -453,3 +473,4 @@ int main(){
 	printf("\n"); 	
 
 }
+
