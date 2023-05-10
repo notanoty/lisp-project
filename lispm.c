@@ -1,12 +1,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include<string.h>
+
+
 #define heapSize 1000 
+#define _REDTEXT_ "\033[31m"
+#define _GREENTEXT_ "\033[32m"
+#define _NORMALTEXT_ "\033[0m"
+
 // snke_case
 // CamlCase
 // dromedaryCase - pascalCase
 
-enum type {INTEGER, LIST};
+enum type {INTEGER, SYMBOL, LIST};
 
 
 
@@ -14,6 +20,7 @@ enum type {INTEGER, LIST};
 struct lispList{
 	union element{
 		int num;
+		char symbol; 
 		struct lispList* list;
 	}  info;
 	 
@@ -32,12 +39,98 @@ struct lispList heap[heapSize];
 
 
 struct lispList* freeList;
+/////////////////////////////////////////////////Strings////////////////////////////////////////////////////////////
+
+int isNumber(char* string){ // Функция isNumber() проверяет является ли строка числом 
+	int stringLen = strlen(string);
+	int i = 0;
+	if(string[0] == '-'){
+		i = 1;
+	}
+	for(; i < stringLen; i++){
+		if(string[i] < '0' || string[i] > '9')
+			return 0;
+	}
+	return 1;
+}
+
+int strToInt(char *string){
+	if (*string == '\0' ){
+		return 0;
+	}
+	char *endptr;
+	int num = strtol(string, &endptr, 10);
+	return num;
+}
+/*Функция slicesStr() вырезает из строки символы с 
+аданным диапазоном индексов и возвращает полученную подстроку.*/
+
+char* slicesStr (char* str, int start, int end){
+	if(start > end){
+		printf("start > end\n");
+		exit(1);
+	}
+	int len = end - start;
+	
+	char* res = malloc(sizeof(char) * (len+1));
+	for(int g = 0; start < end; start++, g++){
+		res[g] = str[start];
+	}
+	res[len] ='\0';
+
+	return res;
+} 
 
 
+char* charToString (char symbol){ //Функция charToString() преобразует символ в строку.
+  	 char* res = malloc(sizeof(char)*2);
+  	 res[0] = symbol;
+  	 res[1] = '\0';
+     return res;	
+}
+
+int eqStrings(char* string1, char* string2){
+	return !strcmp(string1, string2);
+}
+//////////////////////////////////////////////////////List////////////////////////////////////////////////////////////
+
+struct lispList* reverseLispList(struct lispList* list){ //Функция reverseLispList() изменяет порядок элементов списка на обратный.
+	struct lispList* res = NULL;
+	for(; list != NULL; ){
+		struct lispList* listSave = list->next;
+	 	list->next = res; 
+	 	res = list;
+	 	list = listSave;
+	}
+	return res;	
+}
 
 
+struct tokenizeList* reverseTokenizeList(struct tokenizeList* list){ // Функция reverseTokenizeList() изменяет порядок элементов списка на обратный.
+	struct tokenizeList* res = NULL;
+	for(; list != NULL; ){
+		struct tokenizeList* listSave = list->next;
+	 	list->next = res; 
+	 	res = list;
+	 	list = listSave;
+	}
+	return res;
+}
 
-/////////////////////////////////////////////////Initialize List//////////////////////////////////////////////////////////
+struct lispList* cutOutList(struct lispList* startPoint, struct lispList*  endPoint){ // обе переменные хронят в себе элементы которые не должны не находится внутри нового листа
+	struct lispList* resList = startPoint;
+	struct lispList* searchElement = startPoint;
+	if(searchElement == endPoint){
+		searchElement->next = NULL;
+		return NULL;
+	}
+	while(searchElement->next != endPoint){ //->next
+		searchElement = searchElement->next;
+	}
+	searchElement->next = NULL;
+	return resList;
+}
+/////////////////////////////////////////////////Initialize List///////////////////////////////////////////////////////
 
 struct lispList* initializeFreeList(){
 	
@@ -70,6 +163,16 @@ struct lispList* consInteger( int num, struct lispList* pointer){ 	   // Cозд
 	
 	return cell;	
 }
+struct lispList* consSymbol( char symbol, struct lispList* pointer){ 	   // Cоздает ячейку типа INTEGER
+	struct lispList* cell = freeList;
+	freeList = freeList->next;
+		
+	cell->info.symbol = symbol;
+	cell->t = SYMBOL;
+	cell->next = pointer;
+	
+	return cell;	
+}
 struct lispList* consList( struct lispList* info, struct lispList* pointer){// Cоздает ячейку типа LIST
 	struct lispList* cell = freeList;
 	freeList = freeList->next;
@@ -88,6 +191,7 @@ struct lispList* consList( struct lispList* info, struct lispList* pointer){// C
 /////////////////////////////////////////////////Print//////////////////////////////////////////////////////////
 
 
+void printError(const char* text, const char* function);
 void printList(struct lispList* list);
 
 void printElement(union element info, enum type t){ 
@@ -97,9 +201,11 @@ void printElement(union element info, enum type t){
 		printf("[ ");
 		printList( info.list );
 		printf("] ");
+	}else if(t == SYMBOL){
+		printf("'%c'", info.symbol);
 	}
 	else{
-		printf("ERROR\n");
+		printError("Wrong type", __FUNCTION__);
 	}	
 	
 }
@@ -126,6 +232,21 @@ lispList списка, переданного в качестве парамет
 всем элементам, вызывая функцию printElement() для каждого из них.
 */
 
+
+
+
+void printError(const char* text, const char* function){
+	printf(_REDTEXT_);
+	printf("\nError: ");
+	printf(_NORMALTEXT_);
+	printf("'%s' in function ", text);
+	printf(_GREENTEXT_);
+	printf("%s\n\n", function);
+	printf(_NORMALTEXT_);
+	exit(1);
+	
+}
+
 /////////////////////////////////////////////////Tokenize//////////////////////////////////////////////////////////
 
 
@@ -138,43 +259,17 @@ struct tokenizeList*  addString (char* data, struct tokenizeList* ls){ //Фун�
 }
 
 
-struct tokenizeList* reverseTokenizeList(struct tokenizeList* list){ // Функция reverseTokenizeList() изменяет порядок элементов списка на обратный.
-	struct tokenizeList* res = NULL;
-	for(; list != NULL; ){
-		struct tokenizeList* listSave = list->next;
-	 	list->next = res; 
-	 	res = list;
-	 	list = listSave;
-	}
-	return res;
-}
+struct tokenizeList* reverseTokenizeList(struct tokenizeList* list); // Функция reverseTokenizeList() изменяет порядок элементов списка на обратный.
+
 
 /*Функция slicesStr() вырезает из строки символы с 
 аданным диапазоном индексов и возвращает полученную подстроку.*/
 
-char* slicesStr (char* str, int start, int end){
-	if(start > end){
-		printf("start > end\n");
-		exit(1);
-	}
-	int len = end - start;
-	
-	char* res = malloc(sizeof(char) * (len+1));
-	for(int g = 0; start < end; start++, g++){
-		res[g] = str[start];
-	}
-	res[len] ='\0';
-
-	return res;
-} 
+char* slicesStr (char* str, int start, int end);
 
 
-char* charToString (char symbol){ //Функция charToString() преобразует символ в строку.
-  	 char* res = malloc(sizeof(char)*2);
-  	 res[0] = symbol;
-  	 res[1] = '\0';
-     return res;	
-}
+//Функция charToString() преобразует символ в строку.
+char* charToString (char symbol); 
 
 
 
@@ -251,8 +346,80 @@ struct tokenizeList*  tokenize(char* str){
 Функции printTokenizeList(), addString(), reverseTokenizeList(), slicesStr()
 и charToString() отвечают за токенизацию входной строки. 
 */
+
+
+
+
+/////////////////////////////////////////////////Define Type///////////////////////////////////////////////////////
+int isNumber(char* string);
+
+
+struct lispList* defineType(char* info,struct lispList* stack){
+		if(isNumber(info)){
+			int num = strToInt(info);
+			free(info);
+			return consInteger(num , stack );
+		}
+		else if( eqStrings(info,"[") || eqStrings(info,"]") ){
+			return consSymbol(info[0], stack );
+		}
+		else{
+			printError("Type can not be defined", __FUNCTION__);
+		}
+		
+}
+
+
+
+
 /////////////////////////////////////////////////Parsing///////////////////////////////////////////////////////
 
+struct lispList* parsing (struct tokenizeList* list){
+
+	struct lispList* stack = NULL;
+
+	while (list != NULL){
+		char* elemnt = list->info;
+		if( eqStrings(elemnt, "]")){ // добавление чисел и строк на стек 
+			//printf("aaaaaaa\n");
+			stack = defineType(elemnt, stack);
+		} 
+		else if( eqStrings(elemnt, "]")){  //добавление списков на стек
+			printList(stack);
+			printf("\n");
+			exit(1);
+			free(list->info);
+			struct lispList* res;
+			
+			if ( stack->t == SYMBOL && stack->info.symbol == '['){
+				//stack = free_first_stack(stack);
+				stack = stack->next;
+				res = NULL;		
+			} 
+			else{
+				struct lispList* list_start = stack;
+	           	struct lispList* list_end = stack; 
+	           	
+	           	int a = 0;
+				
+				while (  stack->t != SYMBOL )  {
+					a++;
+					list_end = list_end->next;
+				}
+				res = cutOutList(list_start, list_end);
+				//stack = free_first_stack(list_end);
+				stack = stack->next;
+				
+			}
+			stack = consList( reverseLispList(res) ,stack);
+		
+		}
+		//ls = free_first_stack_shallow(ls);//
+		
+	}
+	
+	return stack;
+}
 
 
 
@@ -260,10 +427,14 @@ struct tokenizeList*  tokenize(char* str){
 /////////////////////////////////////////////////Main//////////////////////////////////////////////////////////
 
 int main(){
+
 	freeList = initializeFreeList();
-	struct tokenizeList* stringList =  tokenize("(1 2 (3 4) 5)");
+	struct tokenizeList* stringList =  tokenize("(1 2 5)");
 	printTokenizeList(stringList);
-	freeTokenizeList(stringList);
+	struct lispList* res = parsing(stringList);
+	printList(res);
+	printf(" - res\n");
+	//freeTokenizeList(stringList);
 	exit(1);
 	
 	struct lispList*  list = NULL;
