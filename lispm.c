@@ -43,16 +43,6 @@ struct lispList* freeList;
 //////////////////////////////////////////////////Free////////////////////////////////////////////////////////////
 //void* freeData()
 
-
-/*struct lispList* freeFirstStack(struct lispList* stack){
-			struct lispList* sstack = stack;
-			stack = stack -> next;
-			//free_data(sstack->info, sstack->t);
-			free(sstack->info);
-			free(sstack);
-			return stack;
-}*/
-
 struct tokenizeList* freeFirstStackShallow(struct tokenizeList* stack){
 	struct tokenizeList* sstack = stack;
 	stack = stack -> next;
@@ -325,20 +315,7 @@ struct tokenizeList*  tokenize(char* str){
 			start = i + 1 ;
 			addHappened = 1;
 		}
-		else if ( i + 1 < len && str[i + 1] == '(' ){ 	// нахождение  скобок
-		    if (!addHappened){
-		    	ls = addString(slicesStr(str, start, i), ls);  //вырезание предыдущей информации в результат 
-		    }
-		    char* res = malloc(sizeof(char) * 3);
-		    res[0] = str[i];
-		    res[1] = str[i + 1];
-		    res[2] = '\0';
-			ls = addString(res, ls);
-			start = i + 2;
-			i ++;
-			addHappened = 1;
-		}
-		else if (( str[i] == '(' || str[i] == ')')){ // нахождение квадратных скобок
+		else if (( str[i] == '(' || str[i] == ')')){ // нахождение скобок
 		    if (!addHappened){
 		    	ls = addString(slicesStr(str, start, i), ls);  //вырезание предыдущей информации в результат 
 		    }
@@ -346,7 +323,7 @@ struct tokenizeList*  tokenize(char* str){
 			start = i + 1;
 			addHappened = 1;
 		}
-		else if ((str[i] == ' '|| str[i] == '\n' || str[i] == '\t') && addHappened){//пропуск лишних пробелов и перезодных строк 
+		else if ((str[i] == ' '|| str[i] == '\n' || str[i] == '\t') && addHappened){//пропуск лишних пробелов  
 			start = i + 1;
 		}
 		else{
