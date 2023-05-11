@@ -20,7 +20,7 @@ enum type {INTEGER, SYMBOL, LIST};
 struct lispList{
 	union element{
 		int num;
-		char symbol; 
+		char symbol;  
 		struct lispList* list;
 	}  info;
 	 
@@ -35,10 +35,15 @@ struct tokenizeList{
 };
 
 
-struct lispList heap[heapSize];
+//struct lispList heap[heapSize];
+//struct lispList heapTemp[heapSize];
 
+struct lispList* heap;
+struct lispList* heapTemp; 
 
 struct lispList* freeList;
+
+struct lispList* freeListTemp;
 
 //////////////////////////////////////////////////Free////////////////////////////////////////////////////////////
 //void* freeData()
@@ -49,6 +54,29 @@ struct tokenizeList* freeFirstStackShallow(struct tokenizeList* stack){
 	free(sstack);
 	return stack;
 }
+/////////////////////////////////////////////////Initialize List///////////////////////////////////////////////////////
+
+struct lispList* initializeFreeList(struct lispList* heap){
+	
+	for(int i = 0; i < heapSize - 1 ; i ++){
+		//heap[i].element = NULL;
+		heap[i].next = heap + i + 1;
+	}
+	heap[heapSize - 1].next = NULL;
+	
+	return heap;
+}
+
+/*
+Функция initializeFreeList() инициализирует список свободных ячеек
+памяти из массива heap, который выступает в роли хранилища элементов 
+типа lispList. Она заполняет next каждой ячейки так, чтобы они указывали 
+на следующую свободную ячейку памяти. Возвращаемое значение - 
+указатель на первый элемент массива.
+*/
+
+
+
 
 /////////////////////////////////////////////////Strings////////////////////////////////////////////////////////////
 
@@ -140,28 +168,30 @@ struct lispList* cutOutList(struct lispList* startPoint, struct lispList*  endPo
 	searchElement->next = NULL;
 	return resList;
 }
-/////////////////////////////////////////////////Initialize List///////////////////////////////////////////////////////
 
-struct lispList* initializeFreeList(){
-	
-	for(int i = 0; i < heapSize - 2 ; i ++){
-		//heap[i].element = NULL;
-		heap[i].next = heap + i + 1;
+
+int listLenDeep( struct lispList* list){
+	if(list == NULL){
+		return 0;
 	}
-	heap[heapSize - 1].next = NULL;
+	else if(list->t == LIST){
+		return listLenDeep(list->info.list) + listLenDeep(list->next) + 1;	
+	}
+	else{
+		return listLenDeep(list->next) + 1;
+	}
 	
-	return heap;
 }
 
-/*
-Функция initializeFreeList() инициализирует список свободных ячеек
-памяти из массива heap, который выступает в роли хранилища элементов 
-типа lispList. Она заполняет next каждой ячейки так, чтобы они указывали 
-на следующую свободную ячейку памяти. Возвращаемое значение - 
-указатель на первый элемент массива.
-*/
 
-/////////////////////////////////////////////////Cast Elemnt//////////////////////////////////////////////////////////
+int listLen( struct lispList* list){
+	int len = 0;
+	for(; list != NULL; list = list->next, len ++ );
+	return 	len;
+}
+
+
+/////////////////////////////////////////////////Cons Elemnt//////////////////////////////////////////////////////////
 
 struct lispList* consInteger( int num, struct lispList* pointer){ 	   // Cоздает ячейку типа INTEGER
 	struct lispList* cell = freeList;
@@ -173,6 +203,7 @@ struct lispList* consInteger( int num, struct lispList* pointer){ 	   // Cозд
 	
 	return cell;	
 }
+
 struct lispList* consSymbol( char symbol, struct lispList* pointer){ 	   // Cоздает ячейку типа INTEGER
 	struct lispList* cell = freeList;
 	freeList = freeList->next;
@@ -193,10 +224,65 @@ struct lispList* consList( struct lispList* info, struct lispList* pointer){// C
 	
 	return cell;	
 }
+
+
+struct lispList* consIntegerTemp( int num, struct lispList* pointer){ 	   // Cоздает ячейку типа INTEGER
+	struct lispList* cell = freeListTemp;
+	freeListTemp = freeListTemp->next;
+		
+	cell->info.num = num;
+	cell->t = INTEGER;
+	cell->next = pointer;
+	
+	return cell;	
+}
+
+struct lispList* consSymbolTemp( char symbol, struct lispList* pointer){ 	   // Cоздает ячейку типа INTEGER
+	struct lispList* cell = freeListTemp;
+	freeListTemp = freeListTemp->next;
+		
+	cell->info.symbol = symbol;
+	cell->t = SYMBOL;
+	cell->next = pointer;
+	
+	return cell;	
+}
+
+struct lispList* consListTemp( struct lispList* info, struct lispList* pointer){// Cоздает ячейку типа LIST
+	struct lispList* cell = freeListTemp;
+	freeListTemp = freeListTemp->next;
+		
+	cell->info.list = info;
+	cell->t = LIST;
+	cell->next = pointer;
+	
+	return cell;	
+}
+
+
 /*
 Функции consInteger() и consList() создают новую ячейку памяти, заполняют
 ее переданными параметрами и возвращают указатель на нее. 
 */
+//////////////////////////////////////////////Garbage Collector//////////////////////////////////////
+
+
+
+
+struct lispList* garbageCollector(struct lispList* list){
+	if(list == NULL){
+		return NULL;
+	}
+	if(list->t == LIST){
+		return consListTemp(garbageCollector(list->info.list), garbageCollector(list->next));	
+	}
+	else if(list->t == INTEGER){
+		
+		return consIntegerTemp(list->info.num, garbageCollector(list->next));
+	}
+	
+}
+
 
 /////////////////////////////////////////////////Print//////////////////////////////////////////////////////////
 
@@ -376,16 +462,14 @@ struct lispList* defineType(char* info,struct lispList* stack){
 struct lispList* parsing (struct tokenizeList* list){
 
 	struct lispList* stack = NULL;
-
+	
 	while (list != NULL){
 		char* elemnt = list->info;
 		if( !eqStrings(elemnt, ")")){ // добавление чисел и строк на стек 
 			stack = defineType(elemnt, stack);
 		} 
 		else if( eqStrings(elemnt, ")")){  //добавление списков на стек
-			//printList(stack);
-			//printf("\n");
-			//exit(1);
+
 			free(list->info);
 			struct lispList* res;
 			
@@ -414,7 +498,6 @@ struct lispList* parsing (struct tokenizeList* list){
 		list = freeFirstStackShallow(list);
 		
 	}
-	
 	return stack;
 }
 
@@ -424,30 +507,42 @@ struct lispList* parsing (struct tokenizeList* list){
 /////////////////////////////////////////////////Main//////////////////////////////////////////////////////////
 
 int main(){
-
-	freeList = initializeFreeList();
-	struct tokenizeList* stringList =  tokenize("(123 23212 (1 2 (3 ( 4() 5) 6)) 5123123)");
+	heap = malloc(sizeof(struct lispList) * heapSize);
+	heapTemp = malloc(sizeof(struct lispList) * heapSize);
+	
+	freeList = initializeFreeList(heap);
+	freeListTemp = initializeFreeList(heapTemp);
+	
+	printf( "freeList len = %d\n", listLen(freeList) );
+	struct tokenizeList* stringList =  tokenize("(123 23212 (1 2 (3 ( 4( 1 (2) ) 5) 6)) 5123123) (1 2 3 )");
 	printTokenizeList(stringList);
 	struct lispList* res = parsing(stringList);
-	printList(res);
-	printf(" - res\n");
-	//freeTokenizeList(stringList);
-	exit(1);
+
+	struct lispList* newHeapRes = garbageCollector(res); 
+
+	struct lispList* heapSave = heap; 
+	heap = heapTemp;
+	heapTemp = 	heapSave;
+	struct lispList* freeListSave = freeList;
+	freeList = freeListTemp;
 	
-	struct lispList*  list = NULL;
-	struct lispList*  list2 = NULL;
-	list = consInteger( 14, list);
-	list = consInteger( 1, list);
-	list = consInteger( 2, list);
-	list = consInteger( 3, list);
-
-	list2 = consInteger( 4, list2);
-	list2 = consInteger( 5, list2);
-
-	list = consList(list2, list);
+	freeListTemp = freeListSave;
+	freeListTemp = initializeFreeList(heapTemp);
+	
+	printList(newHeapRes);
 	printf("\n");
-	printList(list);
-	printf("\n"); 	
+	printf(" %d - %d = %d \n", heapSize - listLen(freeList), 
+	listLenDeep(newHeapRes),  heapSize - listLen(freeList) - listLenDeep(newHeapRes) ); 
+	
+	//listLen(freeListTemp) );
+	
+	
+	return 0;
+	printf(" - res\n");
+	printf("len res = %d\n", listLenDeep(res));
+	printf(" %d - %d = %d (used cells)\n", heapSize, listLen(freeList), heapSize - listLen(freeList) );
+	//freeTokenizeList(stringList);
+	return 0;
 
 }
 
