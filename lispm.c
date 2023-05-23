@@ -4,6 +4,8 @@
 
 
 #define heapSize 10000 
+#define stringBufferSize 10000 
+
 #define _REDTEXT_ "\033[31m"
 #define _GREENTEXT_ "\033[32m"
 #define _NORMALTEXT_ "\033[0m"
@@ -23,7 +25,7 @@ struct lispList{
 		char symbol;  
 		struct lispList* list;
 	}  info;
-	int useful; 
+	int refCount; 
 	enum type t; 
 	struct lispList* next;
 	//int num; 
@@ -35,15 +37,14 @@ struct tokenizeList{
 };
 
 
-//struct lispList heap[heapSize];
-//struct lispList heapTemp[heapSize];
 
 struct lispList* heap;
-//struct lispList* heapTemp; 
 
 struct lispList* freeList;
 
-//struct lispList* freeListTemp;
+char* stringBuffer;
+char* memoryStatus;
+
 
 //////////////////////////////////////////////////Free////////////////////////////////////////////////////////////
 //void* freeData()
@@ -54,12 +55,12 @@ struct tokenizeList* freeFirstStackShallow(struct tokenizeList* stack){
 	free(sstack);
 	return stack;
 }
-/////////////////////////////////////////////////Initialize List///////////////////////////////////////////////////////
+/////////////////////////////////////////////////Initialize ///////////////////////////////////////////////////////
 
 struct lispList* initializeFreeList(){
 	for(int i = 0; i < heapSize ; i ++){
 		heap[i].next = heap + i + 1;
-		heap[i].useful = 0;
+		heap[i].refCount = 0;
 	}
 	heap[heapSize - 1].next = NULL;
 	
@@ -74,43 +75,57 @@ struct lispList* initializeFreeList(){
 указатель на первый элемент массива.
 */
 
-/////////////////////////////////////////////////Mark And Sweep////////////////////////////////////////////////////////////
-
-void mark(struct lispList* list ){
-	if(list != NULL && list->useful != 1){
-		if(list->t == LIST){
-			list->useful = 1;
-			mark(list->info.list);
-		}
-		else{
-			list->useful = 1;
-		} 
-		mark(list->next);
+char* initializeStringBufferAndMemoryStatus(){
+	stringBuffer = malloc(sizeof(char) * stringBufferSize);
+	memoryStatus = malloc(sizeof(char) * stringBufferSize);
+	for(int i = 0; i < stringBufferSize; i ++){
+		memoryStatus[i] = 0;
 	}
 	
-	
 }
+/////////////////////////////////////////////////Reference Counting////////////////////////////////////////////////////////////
 
 
-void sweep(){
-	struct lispList* res = NULL;
-	for(int i = 0; i < heapSize ; i ++){
-		if(heap[i].useful){
-			heap[i].useful = 0;
-		}
-		else{
-			heap[i].next = res;
-			res = heap + i;
+void delZoreReference(){
+	freeList = NULL;
+	for(int i = 0; i < heapSize; i ++ ){
+		if (heap[i].refCount == 0){
+			heap[i].next = freeList;
+			freeList = heap + i;
 		}
 	}
-	freeList = res;
+}
+/////////////////////////////////////////////////malloc///////////////////////////////////////////////////////////
+char* myMalloc(int size){
+	int index;
+	int freeSpace = 0;
+	int startIndex = 0;
+	char* startPointer = stringBuffer;
+	
+	for(index = 0; index < stringBufferSize; index++ ){
+		if(memoryStatus[index] == 1){
+			freeSpace = 0;
+			startPointer = stringBuffer + index + 1;
+			startIndex = index + 1;
+		}
+		else{
+			freeSpace++;
+			if(freeSpace == size){
+			 	break;	
+			}
+
+		}
+				
+	}
+	for(int j = startIndex; j < size + startIndex ; j ++){
+		memoryStatus[j] = 1;
+	}
+	return startPointer;
 	
 }
 
-void markAndSweep(struct lispList* list ){
-	mark(list);
-	sweep();
-}
+
+
 
 /////////////////////////////////////////////////Strings////////////////////////////////////////////////////////////
 
@@ -233,6 +248,7 @@ struct lispList* consInteger( int num, struct lispList* pointer){ 	   // Cозд
 		
 	cell->info.num = num;
 	cell->t = INTEGER;
+	cell->refCount ++;
 	cell->next = pointer;
 	
 	return cell;	
@@ -244,6 +260,7 @@ struct lispList* consSymbol( char symbol, struct lispList* pointer){ 	   // Cо�
 		
 	cell->info.symbol = symbol;
 	cell->t = SYMBOL;
+	cell->refCount ++;
 	cell->next = pointer;
 	
 	return cell;	
@@ -253,46 +270,16 @@ struct lispList* consList( struct lispList* info, struct lispList* pointer){// C
 	freeList = freeList->next;
 		
 	cell->info.list = info;
+	if(info != NULL){
+		info->refCount ++;
+	}
 	cell->t = LIST;
 	cell->next = pointer;
 	
 	return cell;	
 }
 
-/*
-struct lispList* consIntegerTemp( int num, struct lispList* pointer){ 	   // Cоздает ячейку типа INTEGER
-	struct lispList* cell = freeListTemp;
-	freeListTemp = freeListTemp->next;
-		
-	cell->info.num = num;
-	cell->t = INTEGER;
-	cell->next = pointer;
-	
-	return cell;	
-}
 
-struct lispList* consSymbolTemp( char symbol, struct lispList* pointer){ 	   // Cоздает ячейку типа INTEGER
-	struct lispList* cell = freeListTemp;
-	freeListTemp = freeListTemp->next;
-		
-	cell->info.symbol = symbol;
-	cell->t = SYMBOL;
-	cell->next = pointer;
-	
-	return cell;	
-}
-
-struct lispList* consListTemp( struct lispList* info, struct lispList* pointer){// Cоздает ячейку типа LIST
-	struct lispList* cell = freeListTemp;
-	freeListTemp = freeListTemp->next;
-		
-	cell->info.list = info;
-	cell->t = LIST;
-	cell->next = pointer;
-	
-	return cell;	
-}
-*/
 
 /*
 Функции consInteger() и consList() создают новую ячейку памяти, заполняют
@@ -523,7 +510,7 @@ struct lispList* parsing (struct tokenizeList* list){
 			struct lispList* res;
 			
 			if ( stack->t == SYMBOL && stack->info.symbol == '('){
-				//stack = free_first_stack(stack);
+				stack->refCount --;
 				stack = stack->next;
 				res = NULL;		
 			} 
@@ -536,7 +523,7 @@ struct lispList* parsing (struct tokenizeList* list){
 				}
 				res = cutOutList(listStart, listEnd);
 				//stack = freeFirstStack(list_end);
-				
+				stack->refCount --;
 				stack = listEnd->next;
 				
 			}
@@ -559,9 +546,40 @@ int main(){
 	heap = malloc(sizeof(struct lispList) * heapSize);
 	
 	freeList = initializeFreeList();
+	initializeStringBufferAndMemoryStatus();
+	char* test = myMalloc(20);
+	char* test2 = myMalloc(20);
+
+	for(int i = 0; i < 20; i ++){
+		test[i] = i + 'a';
+	}
+	
+	for(int i = 0; i < 20; i ++){
+		test2[i] = i + 'A';
+	}
+	test[19]  = '\0';
+	test2[19] = '\0';
+	printf("%s - test1\n", test);
+	printf("%s - test2\n[", test2);
+	for(int i = 0; i < 100; i++){
+		printf(" %d ", memoryStatus[i]);
+	}
+	printf("]\n");
+	/*for(int i = 0; i < 10; i ++)
+		printf("%d ", stringBuffer[i]);
+		
+	printf("\n");
+	*/
+	
+
+	free(heap);
+	free(stringBuffer);
+	exit(1);
+
+
 	
 	//printf( "freeList len = %d\n", listLen(freeList) );
-	struct tokenizeList* stringList =  tokenize("( 1 2 3 4 )   ");
+	struct tokenizeList* stringList =  tokenize("( 1 ( 2 ) ( ) 3 4 )");
 
 	printTokenizeList(stringList);
 	printf("\n");
@@ -572,15 +590,14 @@ int main(){
 
 	
 	struct lispList* res = parsing(stringList);
-
+	
+	printList(res);
 	printf("\n");
 	printf(" %d - %d = %d \n", heapSize - listLen(freeList), listLenDeep(res),  
 	heapSize - listLen(freeList) - listLenDeep(res) ); 
-	//free(heap);
-	//mark(res);
-	//sweep();
-	markAndSweep(res);
+	delZoreReference();
 
+	printList(res);
 	printf("\n");
 	printf(" %d - %d = %d \n", heapSize - listLen(freeList), listLenDeep(res),  
 	heapSize - listLen(freeList) - listLenDeep(res) ); 
